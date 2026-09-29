@@ -91,9 +91,6 @@ function setView(view){
 document.getElementById('tabs').addEventListener('click', e=>{
   const b = e.target.closest('.tab'); if(!b) return; setView(b.dataset.view);
 });
-document.getElementById('bottomnav').addEventListener('click', e=>{
-  const b = e.target.closest('.bnitem'); if(!b) return; setView(b.dataset.view);
-});
 
 /* ===== Render dispatcher ===== */
 function render(){
