@@ -24,17 +24,26 @@ const SCHOOL_MONTHS = [8,9,10,11,0,1,2,3,4,5].map((m,i)=>({
 /* ===== State ===== */
 let STATE = loadState();
 function loadState(){
+  let s = null;
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw) return JSON.parse(raw);
+    if(raw) s = JSON.parse(raw);
   }catch(e){}
-  return { activities: [] };
+  if(!s) s = {};
+  if(!Array.isArray(s.activities)) s.activities = [];
+  if(!Array.isArray(s.students) || !s.students.length){
+    s.students = [1,2,3,4,5,6].map(n=>({ id:'st'+n, name:'Alumno '+n }));
+  }
+  if(!Array.isArray(s.flautaRecords)) s.flautaRecords = [];
+  return s;
 }
 function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); }
-function uid(){ return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function uid(p='a'){ return p+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
 /* ===== Nav / router state ===== */
 let currentView = 'calendario';
+let flautaSubView = 'clases'; // 'clases' | 'alumnos'
+let selectedStudentId = null;
 let calMonthIdx = SCHOOL_MONTHS.findIndex(sm=>{
   const now=new Date();
   return sm.m===now.getMonth() && sm.y===now.getFullYear();
@@ -61,7 +70,16 @@ function fmtHuman(iso){
   return `${dt.getDate()} de ${MONTH_NAMES[dt.getMonth()].toLowerCase()}`;
 }
 function actsForDate(iso){ return STATE.activities.filter(a=>a.date===iso); }
+function recordsForDate(iso){ return STATE.flautaRecords.filter(r=>r.date===iso); }
 function sortByDate(arr){ return [...arr].sort((a,b)=> a.date.localeCompare(b.date)); }
+function sortByDateDesc(arr){ return [...arr].sort((a,b)=> b.date.localeCompare(a.date)); }
+function studentName(id){ const s = STATE.students.find(x=>x.id===id); return s ? s.name : 'Alumno'; }
+function dayHasFlauta(iso){ return recordsForDate(iso).length>0 || actsForDate(iso).some(a=>a.section==='flauta'); }
+function sectionsForDate(iso){
+  const set = new Set(actsForDate(iso).map(a=>a.section));
+  if(recordsForDate(iso).length) set.add('flauta');
+  return [...set];
+}
 
 /* ===== Tabs / navigation ===== */
 function setView(view){
@@ -82,6 +100,7 @@ function render(){
   const app = document.getElementById('app');
   if(currentView==='calendario') app.innerHTML = renderCalendarView();
   else if(currentView==='semana') app.innerHTML = renderWeekView();
+  else if(currentView==='flauta') app.innerHTML = renderFlautaView();
   else app.innerHTML = renderSectionView(currentView);
   bindDynamicHandlers();
 }
@@ -99,10 +118,9 @@ function renderCalendarView(){
     const d = addDays(start,i);
     const iso = toISO(d);
     const outside = d.getMonth()!==sm.m;
-    const dayActs = actsForDate(iso);
-    const dots = [...new Set(dayActs.map(a=>a.section))]
-      .map(s=>`<span class="dot dot-${s}"></span>`).join('');
-    cells += `<div class="daycell ${outside?'outside':''} ${iso===todayISO?'today':''} ${dayActs.length?'hasitems':''}" data-date="${iso}" data-action="open-day">
+    const secs = sectionsForDate(iso);
+    const dots = secs.map(s=>`<span class="dot dot-${s}"></span>`).join('');
+    cells += `<div class="daycell ${outside?'outside':''} ${iso===todayISO?'today':''} ${secs.length?'hasitems':''}" data-date="${iso}" data-action="open-day">
       <span class="daynum">${d.getDate()}</span>
       <div class="daydots">${dots}</div>
     </div>`;
@@ -141,8 +159,9 @@ function renderWeekView(){
   const cols = days.map((d,i)=>{
     const iso = toISO(d);
     const acts = sortByDate(actsForDate(iso));
-    const body = acts.length
-      ? acts.map(a=>miniCard(a)).join('')
+    const recs = recordsForDate(iso);
+    const body = (acts.length || recs.length)
+      ? acts.map(a=>miniCard(a)).join('') + recs.map(r=>miniCardRecord(r)).join('')
       : `<div class="weekday-empty">Sin actividades</div>`;
     return `<div class="weekday-col ${iso===todayISO?'today':''}">
       <div class="weekday-head"><span class="wd">${DOW[i]}</span><span class="wn">${d.getDate()}</span></div>
@@ -168,11 +187,14 @@ function renderWeekView(){
 
 function miniCard(a){
   const s = SECTIONS[a.section];
-  const extra = a.section==='flauta' && a.children && a.children.length
-    ? `<small>${a.children.length} niño${a.children.length>1?'s':''}</small>` : '';
   return `<div class="mini-card sec-${a.section}-soft" data-action="edit-activity" data-id="${a.id}">
     ${s.short} · ${a.title || 'Actividad'}
-    ${extra}
+  </div>`;
+}
+function miniCardRecord(r){
+  return `<div class="mini-card sec-flauta-soft" data-action="edit-record" data-id="${r.id}">
+    Flauta · ${escapeHtml(studentName(r.studentId))}
+    <small>${escapeHtml(r.song||'—')}</small>
   </div>`;
 }
 
@@ -212,13 +234,6 @@ function activityCard(a){
   const meta = SECTIONS[a.section];
   const ytId = extractYoutubeId(a.youtube);
   const chips = (a.instruments||[]).map(i=>`<span class="chip">${escapeHtml(i)}</span>`).join('');
-  const kids = a.section==='flauta' ? `
-    <div class="kids-box">
-      <h4>Niños esta semana</h4>
-      ${ (a.children&&a.children.length) ? a.children.map(k=>`
-        <div class="kid-row"><span class="kid-name">${escapeHtml(k.name)}</span><span class="kid-song">${escapeHtml(k.song||'—')}</span></div>
-      `).join('') : `<div class="weekday-empty" style="padding:2px 0">Sin niños añadidos aún</div>` }
-    </div>` : '';
 
   return `<div class="act-card border-${a.section}">
     <div class="act-top">
@@ -231,11 +246,78 @@ function activityCard(a){
     ${a.description ? `<div class="act-desc">${escapeHtml(a.description)}</div>` : ''}
     ${chips ? `<div class="chips">${chips}</div>` : ''}
     ${ytId ? `<a class="yt-link" href="https://youtu.be/${ytId}" target="_blank" rel="noopener">▶ Ver en YouTube</a><br>` : ''}
-    ${kids}
     <div class="act-actions">
       <button class="btn btn-soft btn-sm" data-action="edit-activity" data-id="${a.id}">Editar</button>
       <button class="btn btn-danger btn-sm" data-action="delete-activity" data-id="${a.id}">Borrar</button>
     </div>
+  </div>`;
+}
+
+/* ===== Flauta view: clases generales + fichas por alumno ===== */
+function renderFlautaView(){
+  const meta = SECTIONS.flauta;
+  const head = `
+  <div class="view-head">
+    <div>
+      <h2>${meta.label}</h2>
+      <div class="view-sub">Clases del grupo y seguimiento diario de cada alumno</div>
+    </div>
+    ${flautaSubView==='clases' ? `<button class="btn btn-primary" data-action="new-activity" data-section="flauta"><span>＋</span> Añadir actividad</button>` : ''}
+  </div>
+  <div class="subtabs">
+    <button class="subtab ${flautaSubView==='clases'?'active':''}" data-action="flauta-sub" data-sub="clases">Clases generales</button>
+    <button class="subtab ${flautaSubView==='alumnos'?'active':''}" data-action="flauta-sub" data-sub="alumnos">Alumnos</button>
+  </div>`;
+
+  if(flautaSubView==='alumnos') return head + renderAlumnosView();
+
+  const acts = sortByDate(STATE.activities.filter(a=>a.section==='flauta'));
+  if(!acts.length) return head + `<div class="empty-state"><span class="emoji">🪈</span>Todavía no hay clases generales de flauta.<br>Añade la primera actividad del grupo.</div>`;
+  const groups = {};
+  acts.forEach(a=>{
+    const [y,m] = a.date.split('-');
+    const key = `${MONTH_NAMES[Number(m)-1]} ${y}`;
+    (groups[key] = groups[key]||[]).push(a);
+  });
+  const listHtml = Object.entries(groups).map(([label,items])=>`
+    <div class="monthgroup-title">${label}</div>
+    <div class="actlist">${items.map(a=>activityCard(a)).join('')}</div>
+  `).join('');
+  return head + listHtml;
+}
+
+function renderAlumnosView(){
+  if(!selectedStudentId || !STATE.students.find(s=>s.id===selectedStudentId)){
+    selectedStudentId = STATE.students[0].id;
+  }
+  const chips = STATE.students.map(s=>
+    `<button class="student-chip ${s.id===selectedStudentId?'active':''}" data-action="select-student" data-id="${s.id}">${escapeHtml(s.name)}</button>`
+  ).join('');
+
+  const student = STATE.students.find(s=>s.id===selectedStudentId);
+  const recs = sortByDateDesc(STATE.flautaRecords.filter(r=>r.studentId===selectedStudentId));
+  const recsHtml = recs.length ? recs.map(r=>`
+    <div class="record-row">
+      <div>
+        <div class="record-date">${fmtHuman(r.date)}</div>
+        <div class="record-song">${escapeHtml(r.song||'—')}</div>
+        ${r.note ? `<div class="record-note">${escapeHtml(r.note)}</div>` : ''}
+      </div>
+      <div class="record-actions">
+        <button class="btn btn-soft btn-sm" data-action="edit-record" data-id="${r.id}">Editar</button>
+        <button class="btn btn-danger btn-sm" data-action="delete-record" data-id="${r.id}">Borrar</button>
+      </div>
+    </div>`).join('')
+    : `<div class="weekday-empty" style="padding:10px 0">Sin canciones registradas todavía.</div>`;
+
+  return `
+  <div class="student-row">${chips}</div>
+  <div class="student-card">
+    <div class="student-card-head">
+      <div class="student-name">${escapeHtml(student.name)}<button class="editnamebtn" data-action="rename-student" data-id="${student.id}">✎</button></div>
+      <button class="btn btn-primary btn-sm" data-action="new-record" data-studentid="${student.id}">＋ Añadir canción</button>
+    </div>
+    ${recsHtml}
   </div>`;
 }
 
@@ -262,6 +344,12 @@ function bindDynamicHandlers(){
     else if(action==='next-month'){ if(calMonthIdx<9){calMonthIdx++; render();} }
     else if(action==='prev-week'){ weekAnchor = addDays(weekAnchor,-7); render(); }
     else if(action==='next-week'){ weekAnchor = addDays(weekAnchor,7); render(); }
+    else if(action==='flauta-sub'){ flautaSubView = el.dataset.sub; render(); }
+    else if(action==='select-student'){ selectedStudentId = el.dataset.id; render(); }
+    else if(action==='rename-student') openRenameStudent(el.dataset.id);
+    else if(action==='new-record') openRecordForm({ studentId: el.dataset.studentid });
+    else if(action==='edit-record') openRecordForm({ id: el.dataset.id });
+    else if(action==='delete-record') openConfirmDeleteRecord(el.dataset.id);
   };
 }
 
@@ -300,7 +388,12 @@ function openDayPanel(iso){
   };
   document.getElementById('btnAddFromDay').onclick = ()=>{ closeModal(); openActivityForm({ date: iso }); };
   document.querySelectorAll('.sheet .mini-card').forEach(c=>{
-    c.addEventListener('click', ()=>{ closeModal(); openActivityForm({ id: c.dataset.id }); });
+    c.addEventListener('click', ()=>{
+      const isRecord = c.dataset.action==='edit-record';
+      closeModal();
+      if(isRecord) openRecordForm({ id: c.dataset.id });
+      else openActivityForm({ id: c.dataset.id });
+    });
   });
 }
 
@@ -332,7 +425,7 @@ function openActivityForm({ id=null, section=null, date=null }={}){
     id: uid(),
     section: section || (currentView in SECTIONS ? currentView : '3anos'),
     date: date || toISO(new Date()),
-    title:'', youtube:'', description:'', instruments:[], children:[]
+    title:'', youtube:'', description:'', instruments:[]
   };
   renderActivityForm(!!existing);
 }
@@ -377,11 +470,6 @@ function renderActivityForm(isEdit){
         </div>
         <div class="instr-tags" id="instrTags"></div>
       </div>
-      <div class="field" id="flautaBlock" style="${d.section==='flauta'?'':'display:none'}">
-        <label>Niños y canción de esta semana</label>
-        <div id="kidsList"></div>
-        <button type="button" class="btn btn-soft btn-sm" id="btnAddKid">＋ Añadir niño</button>
-      </div>
       <div class="sheet-actions">
         <button class="btn btn-ghost" data-action="overlay-close">Cancelar</button>
         <button class="btn btn-primary" id="btnSaveActivity">${isEdit?'Guardar cambios':'Crear actividad'}</button>
@@ -397,7 +485,6 @@ function wireActivityForm(){
   document.querySelectorAll('.sec-choice-btn').forEach(b=>{
     b.onclick = ()=>{
       d.section = b.dataset.secpick;
-      document.getElementById('flautaBlock').style.display = d.section==='flauta' ? '' : 'none';
       document.querySelectorAll('.sec-choice-btn').forEach(x=>{
         x.className = 'sec-choice-btn' + (x.dataset.secpick===d.section ? ' sel-'+d.section : '');
       });
@@ -422,24 +509,6 @@ function wireActivityForm(){
     if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnAddInstr').click(); }
   });
 
-  function renderKids(){
-    const box = document.getElementById('kidsList');
-    if(!box) return;
-    box.innerHTML = (d.children||[]).map((k,i)=>`
-      <div class="kidedit-row">
-        <input type="text" placeholder="Nombre del niño" value="${escapeHtml(k.name)}" data-kidname="${i}">
-        <input type="text" placeholder="Canción" value="${escapeHtml(k.song)}" data-kidsong="${i}">
-        <button type="button" class="btn btn-icon btn-danger" data-rmk="${i}">✕</button>
-      </div>`).join('');
-    box.querySelectorAll('[data-kidname]').forEach(inp=> inp.oninput = ()=> d.children[Number(inp.dataset.kidname)].name = inp.value );
-    box.querySelectorAll('[data-kidsong]').forEach(inp=> inp.oninput = ()=> d.children[Number(inp.dataset.kidsong)].song = inp.value );
-    box.querySelectorAll('[data-rmk]').forEach(btn=> btn.onclick = ()=>{ d.children.splice(Number(btn.dataset.rmk),1); renderKids(); } );
-  }
-  d.children = d.children || [];
-  renderKids();
-  const addKidBtn = document.getElementById('btnAddKid');
-  if(addKidBtn) addKidBtn.onclick = ()=>{ d.children.push({name:'',song:''}); renderKids(); };
-
   document.getElementById('btnSaveActivity').onclick = ()=>{
     d.date = document.getElementById('fDate').value || toISO(new Date());
     d.title = document.getElementById('fTitle').value.trim();
@@ -448,6 +517,87 @@ function wireActivityForm(){
     if(!d.title){ document.getElementById('fTitle').style.borderColor = '#C4302B'; return; }
     const idx = STATE.activities.findIndex(a=>a.id===d.id);
     if(idx>=0) STATE.activities[idx] = d; else STATE.activities.push(d);
+    saveState(); closeModal(); render();
+  };
+}
+
+/* --- Rename student --- */
+function openRenameStudent(id){
+  const s = STATE.students.find(x=>x.id===id);
+  if(!s) return;
+  openModal(`
+    <div class="sheet">
+      <div class="sheet-head"><h3>Nombre del alumno</h3><button class="closebtn" data-action="overlay-close">✕</button></div>
+      <div class="field"><label>Nombre</label><input type="text" id="fStudentName" value="${escapeHtml(s.name)}"></div>
+      <div class="sheet-actions">
+        <button class="btn btn-ghost" data-action="overlay-close">Cancelar</button>
+        <button class="btn btn-primary" id="btnSaveStudent">Guardar</button>
+      </div>
+    </div>`);
+  document.getElementById('btnSaveStudent').onclick = ()=>{
+    const v = document.getElementById('fStudentName').value.trim();
+    if(v) s.name = v;
+    saveState(); closeModal(); render();
+  };
+}
+
+/* --- Flute song record form (add/edit) --- */
+let recordDraft = null;
+function openRecordForm({ id=null, studentId=null }={}){
+  const existing = id ? STATE.flautaRecords.find(r=>r.id===id) : null;
+  recordDraft = existing ? {...existing} : {
+    id: uid('r'),
+    studentId: studentId || selectedStudentId || STATE.students[0].id,
+    date: toISO(new Date()),
+    song:'', note:''
+  };
+  const d = recordDraft;
+  const studentOptions = STATE.students.map(s=>`<option value="${s.id}" ${s.id===d.studentId?'selected':''}>${escapeHtml(s.name)}</option>`).join('');
+
+  openModal(`
+    <div class="sheet">
+      <div class="sheet-head">
+        <h3>${existing?'Editar canción':'Nueva canción'}</h3>
+        <button class="closebtn" data-action="overlay-close">✕</button>
+      </div>
+      <div class="field"><label>Alumno</label><select id="fStudent">${studentOptions}</select></div>
+      <div class="field"><label>Fecha</label><input type="date" id="fRecDate" value="${d.date}"></div>
+      <div class="field"><label>Canción</label><input type="text" id="fSong" placeholder="Ej. Estrellita" value="${escapeHtml(d.song)}"></div>
+      <div class="field"><label>Nota (opcional)</label><textarea id="fNote" placeholder="Cómo le fue, qué repasar...">${escapeHtml(d.note)}</textarea></div>
+      <div class="sheet-actions">
+        <button class="btn btn-ghost" data-action="overlay-close">Cancelar</button>
+        <button class="btn btn-primary" id="btnSaveRecord">${existing?'Guardar cambios':'Añadir'}</button>
+      </div>
+    </div>`);
+
+  document.getElementById('btnSaveRecord').onclick = ()=>{
+    d.studentId = document.getElementById('fStudent').value;
+    d.date = document.getElementById('fRecDate').value || toISO(new Date());
+    d.song = document.getElementById('fSong').value.trim();
+    d.note = document.getElementById('fNote').value.trim();
+    if(!d.song){ document.getElementById('fSong').style.borderColor = '#C4302B'; return; }
+    const idx = STATE.flautaRecords.findIndex(r=>r.id===d.id);
+    if(idx>=0) STATE.flautaRecords[idx] = d; else STATE.flautaRecords.push(d);
+    selectedStudentId = d.studentId;
+    saveState(); closeModal(); render();
+  };
+}
+
+/* --- Confirm delete record --- */
+function openConfirmDeleteRecord(id){
+  const r = STATE.flautaRecords.find(x=>x.id===id);
+  if(!r) return;
+  openModal(`
+    <div class="sheet">
+      <div class="sheet-head"><h3>Borrar canción</h3><button class="closebtn" data-action="overlay-close">✕</button></div>
+      <p class="confirm-text">¿Borrar «${escapeHtml(r.song||'esta canción')}» de ${escapeHtml(studentName(r.studentId))}?</p>
+      <div class="sheet-actions">
+        <button class="btn btn-ghost" data-action="overlay-close">Cancelar</button>
+        <button class="btn btn-danger" id="btnConfirmDelRec">Borrar</button>
+      </div>
+    </div>`);
+  document.getElementById('btnConfirmDelRec').onclick = ()=>{
+    STATE.flautaRecords = STATE.flautaRecords.filter(x=>x.id!==id);
     saveState(); closeModal(); render();
   };
 }
