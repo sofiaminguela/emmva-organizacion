@@ -1,12 +1,28 @@
 /* ===== Config & data ===== */
 const SECTIONS = {
   '3anos':   { label:'3 años',            short:'3 años',   class:'3anos'   },
-  '4y5anos': { label:'4–5 años',          short:'4–5 años', class:'4y5anos' },
+  '4y5anos': { label:'Formación básica',  short:'F. Básica',class:'4y5anos' },
   'flauta':  { label:'Iniciación flauta', short:'Flauta',   class:'flauta'  },
 };
-const DOW = ['Lun','Mar','Mié','Jué','Vie','Sáb','Dom'];
+const DOW = ['Mié','Jue','Vie','Sáb','Dom','Lun','Mar']; // vista semanal (miércoles a miércoles)
+const CAL_DOW = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']; // cabecera del calendario mensual
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const STORAGE_KEY = 'musicapp_v1';
+
+/* Horario fijo semanal: qué secciones tienen clase cada día (getDay(): Dom0 Lun1 Mar2 Mié3 Jue4 Vie5 Sáb6).
+   Varios grupos el mismo día/sección solo cuentan una vez: comparten la misma actividad. */
+const SCHEDULE = {
+  1: ['4y5anos','3anos','flauta'],   // Lunes: formación básica, 3 años, ini flauta
+  2: ['4y5anos'],                    // Martes: 2 grupos formación básica
+  3: ['4y5anos','flauta'],           // Miércoles: 2 grupos formación básica, ini flauta
+  4: ['3anos','4y5anos'],            // Jueves: 2 grupos 3 años, 1 grupo formación básica
+};
+const GROUP_COUNTS = { // nº de grupos por día+sección, solo informativo en la UI
+  '1-4y5anos':1, '1-3anos':1, '1-flauta':1,
+  '2-4y5anos':2,
+  '3-4y5anos':2, '3-flauta':1,
+  '4-3anos':2, '4-4y5anos':1,
+};
 
 /* Determine current school year (Sep -> Jun) */
 function computeSchoolYearStart(){
@@ -49,21 +65,30 @@ let calMonthIdx = SCHOOL_MONTHS.findIndex(sm=>{
   return sm.m===now.getMonth() && sm.y===now.getFullYear();
 });
 if(calMonthIdx<0) calMonthIdx = 0;
-let weekAnchor = mondayOf(new Date());
+let weekAnchor = wedOf(new Date());
 
 document.getElementById('cursoLabel').textContent = `${SY_START}–${SY_START+1}`;
 
 /* ===== Helpers ===== */
 function pad(n){ return n<10 ? '0'+n : ''+n; }
 function toISO(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-function mondayOf(d){
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function wedOf(d){
   const x = new Date(d);
-  const day = (x.getDay()+6)%7; // 0=Mon
-  x.setDate(x.getDate()-day);
+  const diff = (x.getDay() - 3 + 7) % 7; // 3 = miércoles
+  x.setDate(x.getDate()-diff);
   x.setHours(0,0,0,0);
   return x;
 }
-function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function weekSessionDates(section, iso){
+  const start = wedOf(new Date(iso+'T00:00:00'));
+  const dates = [];
+  for(let i=0;i<7;i++){
+    const d = addDays(start,i);
+    if((SCHEDULE[d.getDay()]||[]).includes(section)) dates.push(toISO(d));
+  }
+  return dates;
+}
 function fmtHuman(iso){
   const [y,m,d] = iso.split('-').map(Number);
   const dt = new Date(y,m-1,d);
@@ -85,7 +110,6 @@ function sectionsForDate(iso){
 function setView(view){
   currentView = view;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
-  document.querySelectorAll('.bnitem').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
   render();
 }
 document.getElementById('tabs').addEventListener('click', e=>{
@@ -136,13 +160,13 @@ function renderCalendarView(){
     <button class="btn btn-icon btn-ghost" data-action="next-month" ${calMonthIdx===9?'disabled style="opacity:.35"':''}>›</button>
   </div>
   <div class="calwrap">
-    <div class="weekdays">${DOW.map(d=>`<span>${d}</span>`).join('')}</div>
+    <div class="weekdays">${CAL_DOW.map(d=>`<span>${d}</span>`).join('')}</div>
     <div class="calgrid">${cells}</div>
   </div>
   <div style="display:flex;gap:14px;margin-top:14px;flex-wrap:wrap">
-    <span class="pill pill-3anos">● 3 años</span>
-    <span class="pill pill-4y5anos">● 4–5 años</span>
-    <span class="pill pill-flauta">● Flauta</span>
+    <span class="pill pill-3anos">● ${SECTIONS['3anos'].label}</span>
+    <span class="pill pill-4y5anos">● ${SECTIONS['4y5anos'].label}</span>
+    <span class="pill pill-flauta">● ${SECTIONS['flauta'].label}</span>
   </div>`;
 }
 
@@ -157,7 +181,7 @@ function renderWeekView(){
     const acts = sortByDate(actsForDate(iso));
     const recs = recordsForDate(iso);
     const body = (acts.length || recs.length)
-      ? acts.map(a=>miniCard(a)).join('') + recs.map(r=>miniCardRecord(r)).join('')
+      ? acts.map(a=>miniCard(a,'view')).join('') + recs.map(r=>miniCardRecord(r)).join('')
       : `<div class="weekday-empty">Sin actividades</div>`;
     return `<div class="weekday-col ${iso===todayISO?'today':''}">
       <div class="weekday-head"><span class="wd">${DOW[i]}</span><span class="wn">${d.getDate()}</span></div>
@@ -180,10 +204,11 @@ function renderWeekView(){
   <div class="weekgrid">${cols}</div>`;
 }
 
-function miniCard(a){
+function miniCard(a, mode='edit'){
   const s = SECTIONS[a.section];
-  return `<div class="mini-card sec-${a.section}-soft" data-action="edit-activity" data-id="${a.id}">
-    ${s.short} · ${a.title || 'Actividad'}
+  const action = mode==='view' ? 'view-activity' : 'edit-activity';
+  return `<div class="mini-card sec-${a.section}-soft" data-action="${action}" data-id="${a.id}">
+    ${s.short} · ${a.title || 'Actividad'}${a.planId ? ' ' : ''}
   </div>`;
 }
 function miniCardRecord(r){
@@ -234,7 +259,7 @@ function activityCard(a){
     <div class="act-top">
       <div>
         <div class="act-date">${fmtHuman(a.date)}</div>
-        <div class="act-title">${escapeHtml(a.title||'Actividad')}</div>
+        <div class="act-title">${escapeHtml(a.title||'Actividad')}${a.planId ? ' <span title="Se repite toda la semana"></span>' : ''}</div>
       </div>
       <span class="pill pill-${a.section}">${meta.short}</span>
     </div>
@@ -333,6 +358,7 @@ function bindDynamicHandlers(){
     if(action==='open-day') openDayPanel(el.dataset.date);
     else if(action==='new-activity') openActivityForm({ section: el.dataset.section || null });
     else if(action==='edit-activity') openActivityForm({ id: el.dataset.id });
+    else if(action==='view-activity') openActivityView(el.dataset.id);
     else if(action==='delete-activity') openConfirmDelete(el.dataset.id);
     else if(action==='prev-month'){ if(calMonthIdx>0){calMonthIdx--; render();} }
     else if(action==='next-month'){ if(calMonthIdx<9){calMonthIdx++; render();} }
@@ -359,8 +385,9 @@ function openModal(html){
 /* --- Day panel --- */
 function openDayPanel(iso){
   const acts = sortByDate(actsForDate(iso));
-  const listHtml = acts.length
-    ? `<div class="daylist">${acts.map(a=>miniCard(a)).join('')}</div>`
+  const recs = recordsForDate(iso);
+  const listHtml = (acts.length || recs.length)
+    ? `<div class="daylist">${acts.map(a=>miniCard(a)).join('')}${recs.map(r=>miniCardRecord(r)).join('')}</div>`
     : `<div class="weekday-empty" style="margin-bottom:14px">No hay actividades este día.</div>`;
 
   openModal(`
@@ -377,7 +404,7 @@ function openDayPanel(iso){
     </div>`);
 
   document.getElementById('btnSeeWeek').onclick = ()=>{
-    weekAnchor = mondayOf(new Date(iso+'T00:00:00'));
+    weekAnchor = wedOf(new Date(iso+'T00:00:00'));
     closeModal(); setView('semana');
   };
   document.getElementById('btnAddFromDay').onclick = ()=>{ closeModal(); openActivityForm({ date: iso }); };
@@ -391,10 +418,48 @@ function openDayPanel(iso){
   });
 }
 
+/* --- Activity detail (view only, from vista semanal) --- */
+function openActivityView(id){
+  const a = STATE.activities.find(x=>x.id===id);
+  if(!a) return;
+  const meta = SECTIONS[a.section];
+  const ytId = extractYoutubeId(a.youtube);
+  const chips = (a.instruments||[]).map(i=>`<span class="chip">${escapeHtml(i)}</span>`).join('');
+
+  openModal(`
+    <div class="sheet">
+      <div class="sheet-head">
+        <h3>${meta.short}${a.planId ? ' ' : ''}</h3>
+        <button class="closebtn" data-action="overlay-close">✕</button>
+      </div>
+      <div class="act-date">${fmtHuman(a.date)}</div>
+      <div class="act-title" style="margin:4px 0 10px">${escapeHtml(a.title||'Actividad')}</div>
+      ${a.description ? `<div class="act-desc">${escapeHtml(a.description)}</div>` : ''}
+      ${chips ? `<div class="chips">${chips}</div>` : ''}
+      ${ytId ? `<a class="yt-link" href="https://youtu.be/${ytId}" target="_blank" rel="noopener">Ver en YouTube</a><br>` : ''}
+      <div class="sheet-actions">
+        <button class="btn btn-danger" id="btnViewDelete">Borrar</button>
+        <button class="btn btn-primary" id="btnViewEdit">Editar</button>
+      </div>
+    </div>`);
+
+  document.getElementById('btnViewEdit').onclick = ()=>{ closeModal(); openActivityForm({ id }); };
+  document.getElementById('btnViewDelete').onclick = ()=>{ closeModal(); openConfirmDelete(id); };
+}
+
 /* --- Confirm delete --- */
 function openConfirmDelete(id){
   const a = STATE.activities.find(x=>x.id===id);
   if(!a) return;
+  if(a.planId){
+    openScopeChoice({
+      title:'Borrar actividad',
+      text:`«${escapeHtml(a.title||'esta actividad')}» se repite toda la semana. ¿Borrar solo este día o todos los días de esta semana?`,
+      onThis: ()=>{ STATE.activities = STATE.activities.filter(x=>x.id!==id); saveState(); closeModal(); render(); },
+      onAll: ()=>{ STATE.activities = STATE.activities.filter(x=>x.planId!==a.planId); saveState(); closeModal(); render(); }
+    });
+    return;
+  }
   openModal(`
     <div class="sheet">
       <div class="sheet-head"><h3>Borrar actividad</h3><button class="closebtn" data-action="overlay-close">✕</button></div>
@@ -419,7 +484,7 @@ function openActivityForm({ id=null, section=null, date=null }={}){
     id: uid(),
     section: section || (currentView in SECTIONS ? currentView : '3anos'),
     date: date || toISO(new Date()),
-    title:'', youtube:'', description:'', instruments:[]
+    title:'', youtube:'', description:'', instruments:[], planId:null
   };
   renderActivityForm(!!existing);
 }
@@ -464,17 +529,39 @@ function renderActivityForm(isEdit){
         </div>
         <div class="instr-tags" id="instrTags"></div>
       </div>
+      ${!isEdit ? `
+      <div class="field">
+        <label class="checkbox-label"><input type="checkbox" id="fRepeatWeek"> Repetir en todos los días de clase de esta sección esta semana</label>
+        <div class="view-sub" id="repeatPreview" style="margin-top:6px;font-size:15px"></div>
+      </div>` : `
+      ${d.planId ? `<div class="view-sub" style="margin-bottom:4px">Esta actividad se repite toda la semana</div>` : ''}
+      `}
       <div class="sheet-actions">
         <button class="btn btn-ghost" data-action="overlay-close">Cancelar</button>
         <button class="btn btn-primary" id="btnSaveActivity">${isEdit?'Guardar cambios':'Crear actividad'}</button>
       </div>
     </div>`);
 
-  wireActivityForm();
+  wireActivityForm(isEdit);
 }
 
-function wireActivityForm(){
+function wireActivityForm(isEdit){
   const d = formDraft;
+
+  function updatePreview(){
+    const box = document.getElementById('repeatPreview');
+    if(!box) return;
+    const chk = document.getElementById('fRepeatWeek');
+    if(!chk || !chk.checked){ box.textContent=''; return; }
+    const dates = weekSessionDates(d.section, document.getElementById('fDate').value || d.date);
+    if(!dates.length){ box.textContent = 'Esta sección no tiene días fijos esta semana'; return; }
+    const parts = dates.map(dt=>{
+      const wd = new Date(dt+'T00:00:00').getDay();
+      const n = GROUP_COUNTS[`${wd}-${d.section}`] || 1;
+      return fmtHuman(dt) + (n>1 ? ` (${n} grupos)` : '');
+    });
+    box.textContent = 'Se creará el ' + parts.join(', ');
+  }
 
   document.querySelectorAll('.sec-choice-btn').forEach(b=>{
     b.onclick = ()=>{
@@ -482,8 +569,13 @@ function wireActivityForm(){
       document.querySelectorAll('.sec-choice-btn').forEach(x=>{
         x.className = 'sec-choice-btn' + (x.dataset.secpick===d.section ? ' sel-'+d.section : '');
       });
+      updatePreview();
     };
   });
+  const dateInput = document.getElementById('fDate');
+  dateInput.addEventListener('input', updatePreview);
+  const repeatChk = document.getElementById('fRepeatWeek');
+  if(repeatChk) repeatChk.addEventListener('change', updatePreview);
 
   function renderInstrTags(){
     document.getElementById('instrTags').innerHTML = d.instruments.map((ins,i)=>
@@ -509,10 +601,57 @@ function wireActivityForm(){
     d.description = document.getElementById('fDesc').value.trim();
     d.youtube = document.getElementById('fYoutube').value.trim();
     if(!d.title){ document.getElementById('fTitle').style.borderColor = '#C4302B'; return; }
-    const idx = STATE.activities.findIndex(a=>a.id===d.id);
-    if(idx>=0) STATE.activities[idx] = d; else STATE.activities.push(d);
-    saveState(); closeModal(); render();
+
+    if(!isEdit && repeatChk && repeatChk.checked){
+      const dates = weekSessionDates(d.section, d.date);
+      if(dates.length){
+        const planId = uid('plan');
+        dates.forEach(dt=>{
+          STATE.activities.push({ ...d, instruments:[...d.instruments], id: uid(), date: dt, planId });
+        });
+        saveState(); closeModal(); render();
+        return;
+      }
+    }
+
+    if(isEdit && d.planId){
+      openScopeChoice({
+        title:'Guardar cambios',
+        text:'Esta actividad se repite toda la semana. ¿Aplicar el cambio solo a este día o a todos los días de esta semana?',
+        onThis: ()=>{ saveActivitySingle({...d, planId:null}); },
+        onAll: ()=>{
+          STATE.activities = STATE.activities.map(a=> a.planId===d.planId
+            ? { ...a, title:d.title, description:d.description, youtube:d.youtube, instruments:d.instruments, section:d.section }
+            : a);
+          saveState(); closeModal(); render();
+        }
+      });
+      return;
+    }
+
+    saveActivitySingle(d);
   };
+}
+
+function saveActivitySingle(d){
+  const idx = STATE.activities.findIndex(a=>a.id===d.id);
+  if(idx>=0) STATE.activities[idx] = d; else STATE.activities.push(d);
+  saveState(); closeModal(); render();
+}
+
+/* --- Scope choice (día vs. toda la semana) --- */
+function openScopeChoice({ title, text, onThis, onAll }){
+  openModal(`
+    <div class="sheet">
+      <div class="sheet-head"><h3>${title}</h3><button class="closebtn" data-action="overlay-close">✕</button></div>
+      <p class="confirm-text">${text}</p>
+      <div class="sheet-actions" style="justify-content:stretch; flex-direction:column">
+        <button class="btn btn-ghost" id="btnScopeThis" style="justify-content:center">Solo este día</button>
+        <button class="btn btn-primary" id="btnScopeAll" style="justify-content:center">Toda la semana</button>
+      </div>
+    </div>`);
+  document.getElementById('btnScopeThis').onclick = onThis;
+  document.getElementById('btnScopeAll').onclick = onAll;
 }
 
 /* --- Rename student --- */
