@@ -245,7 +245,7 @@ function activityCard(a){
     </div>
     ${a.description ? `<div class="act-desc">${escapeHtml(a.description)}</div>` : ''}
     ${chips ? `<div class="chips">${chips}</div>` : ''}
-    ${ytId ? `<a class="yt-link" href="https://youtu.be/${ytId}" target="_blank" rel="noopener">▶ Ver en YouTube</a><br>` : ''}
+    ${ytId ? `<a class="yt-link" href="https://youtu.be/${ytId}" target="_blank" rel="noopener">Ver en YouTube</a><br>` : ''}
     <div class="act-actions">
       <button class="btn btn-soft btn-sm" data-action="edit-activity" data-id="${a.id}">Editar</button>
       <button class="btn btn-danger btn-sm" data-action="delete-activity" data-id="${a.id}">Borrar</button>

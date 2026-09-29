@@ -98,26 +98,6 @@ input,select,textarea{font-family:inherit}
   .brand{padding:16px 28px 10px}
 }
 
-/* ===== Bottom nav (mobile) ===== 
-.bottomnav{
-  position:fixed; left:0; right:0; bottom:0; z-index:20;
-  height:calc(var(--navh) + env(safe-area-inset-bottom,0px));
-  display:flex; background:var(--paper);
-  border-top:1px solid var(--line);
-  padding:0 4px env(safe-area-inset-bottom,0px);
-  box-shadow:0 -6px 18px rgba(47, 65, 86, 0.07);
-}
-.bnitem{
-  flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-  background:none; border:none; color:var(--ink-soft); font-size:10.5px; font-weight:700;
-  padding:4px 2px; border-radius:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
-.bnitem.active{color:var(--ink); background:var(--cream-deep)}
-.bnicon{font-size:18px; line-height:1}
-@media (min-width:860px){ .bottomnav{display:none} body{padding-bottom:0} }
-
-*/
-
 
 /* ===== Main container ===== */
 #app{max-width:980px; margin:0 auto; padding:18px 14px 30px}
