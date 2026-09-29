@@ -130,7 +130,6 @@ function renderCalendarView(){
   <div class="view-head">
     <div>
       <h2>Calendario común</h2>
-      <div class="view-sub">Toca un día para ver o añadir actividades</div>
     </div>
     <button class="btn btn-primary" data-action="new-activity"><span>＋</span> Añadir actividad</button>
   </div>
@@ -173,7 +172,6 @@ function renderWeekView(){
   <div class="view-head">
     <div>
       <h2>Vista semanal</h2>
-      <div class="view-sub">Todas las secciones juntas</div>
     </div>
     <button class="btn btn-primary" data-action="new-activity"><span>＋</span> Añadir actividad</button>
   </div>
@@ -260,7 +258,6 @@ function renderFlautaView(){
   <div class="view-head">
     <div>
       <h2>${meta.label}</h2>
-      <div class="view-sub">Clases del grupo y seguimiento diario de cada alumno</div>
     </div>
     ${flautaSubView==='clases' ? `<button class="btn btn-primary" data-action="new-activity" data-section="flauta"><span>＋</span> Añadir actividad</button>` : ''}
   </div>
