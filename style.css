@@ -44,7 +44,7 @@ body{
   margin:0;
   color:var(--ink);
   font-family:'Karla',sans-serif;
-  padding-bottom:calc(var(--navh) + env(safe-area-inset-bottom,0px) + 18px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
   -webkit-tap-highlight-color:transparent;
   background-color:var(--cream);
   background-image:
@@ -98,7 +98,7 @@ input,select,textarea{font-family:inherit}
   .brand{padding:16px 28px 10px}
 }
 
-/* ===== Bottom nav (mobile) ===== */
+/* ===== Bottom nav (mobile) ===== 
 .bottomnav{
   position:fixed; left:0; right:0; bottom:0; z-index:20;
   height:calc(var(--navh) + env(safe-area-inset-bottom,0px));
@@ -115,6 +115,9 @@ input,select,textarea{font-family:inherit}
 .bnitem.active{color:var(--ink); background:var(--cream-deep)}
 .bnicon{font-size:18px; line-height:1}
 @media (min-width:860px){ .bottomnav{display:none} body{padding-bottom:0} }
+
+*/
+
 
 /* ===== Main container ===== */
 #app{max-width:980px; margin:0 auto; padding:18px 14px 30px}
