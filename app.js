@@ -208,7 +208,7 @@ function miniCard(a, mode='edit'){
   const s = SECTIONS[a.section];
   const action = mode==='view' ? 'view-activity' : 'edit-activity';
   return `<div class="mini-card sec-${a.section}-soft" data-action="${action}" data-id="${a.id}">
-    ${s.short} · ${a.title || 'Actividad'}${a.planId ? ' ' : ''}
+    ${s.short} · ${a.title || 'Actividad'}${a.planId ? ' 🔁' : ''}
   </div>`;
 }
 function miniCardRecord(r){
@@ -259,13 +259,14 @@ function activityCard(a){
     <div class="act-top">
       <div>
         <div class="act-date">${fmtHuman(a.date)}</div>
-        <div class="act-title">${escapeHtml(a.title||'Actividad')}${a.planId ? ' <span title="Se repite toda la semana"></span>' : ''}</div>
+        <div class="act-title">${escapeHtml(a.title||'Actividad')}${a.planId ? ' <span title="Se repite toda la semana">🔁</span>' : ''}</div>
       </div>
       <span class="pill pill-${a.section}">${meta.short}</span>
     </div>
     ${a.description ? `<div class="act-desc">${escapeHtml(a.description)}</div>` : ''}
     ${chips ? `<div class="chips">${chips}</div>` : ''}
     ${ytId ? `<a class="yt-link" href="https://youtu.be/${ytId}" target="_blank" rel="noopener">Ver en YouTube</a><br>` : ''}
+    ${a.spotify ? `<a class="sp-link" href="${escapeHtml(a.spotify)}" target="_blank" rel="noopener">Escuchar en Spotify</a><br>` : ''}
     <div class="act-actions">
       <button class="btn btn-soft btn-sm" data-action="edit-activity" data-id="${a.id}">Editar</button>
       <button class="btn btn-danger btn-sm" data-action="delete-activity" data-id="${a.id}">Borrar</button>
@@ -429,7 +430,7 @@ function openActivityView(id){
   openModal(`
     <div class="sheet">
       <div class="sheet-head">
-        <h3>${meta.short}${a.planId ? ' ' : ''}</h3>
+        <h3>${meta.short}${a.planId ? ' 🔁' : ''}</h3>
         <button class="closebtn" data-action="overlay-close">✕</button>
       </div>
       <div class="act-date">${fmtHuman(a.date)}</div>
@@ -437,6 +438,7 @@ function openActivityView(id){
       ${a.description ? `<div class="act-desc">${escapeHtml(a.description)}</div>` : ''}
       ${chips ? `<div class="chips">${chips}</div>` : ''}
       ${ytId ? `<a class="yt-link" href="https://youtu.be/${ytId}" target="_blank" rel="noopener">Ver en YouTube</a><br>` : ''}
+      ${a.spotify ? `<a class="sp-link" href="${escapeHtml(a.spotify)}" target="_blank" rel="noopener">Escuchar en Spotify</a><br>` : ''}
       <div class="sheet-actions">
         <button class="btn btn-danger" id="btnViewDelete">Borrar</button>
         <button class="btn btn-primary" id="btnViewEdit">Editar</button>
@@ -484,7 +486,7 @@ function openActivityForm({ id=null, section=null, date=null }={}){
     id: uid(),
     section: section || (currentView in SECTIONS ? currentView : '3anos'),
     date: date || toISO(new Date()),
-    title:'', youtube:'', description:'', instruments:[], planId:null
+    title:'', youtube:'', spotify:'', description:'', instruments:[], planId:null
   };
   renderActivityForm(!!existing);
 }
@@ -522,6 +524,10 @@ function renderActivityForm(isEdit){
         <input type="url" id="fYoutube" placeholder="https://youtu.be/..." value="${escapeHtml(d.youtube)}">
       </div>
       <div class="field">
+        <label>Enlace de Spotify</label>
+        <input type="url" id="fSpotify" placeholder="https://open.spotify.com/..." value="${escapeHtml(d.spotify||'')}">
+      </div>
+      <div class="field">
         <label>Instrumentos</label>
         <div class="addrow">
           <input type="text" id="fInstrInput" placeholder="Ej. Panderetas">
@@ -534,7 +540,7 @@ function renderActivityForm(isEdit){
         <label class="checkbox-label"><input type="checkbox" id="fRepeatWeek"> Repetir en todos los días de clase de esta sección esta semana</label>
         <div class="view-sub" id="repeatPreview" style="margin-top:6px;font-size:15px"></div>
       </div>` : `
-      ${d.planId ? `<div class="view-sub" style="margin-bottom:4px">Esta actividad se repite toda la semana</div>` : ''}
+      ${d.planId ? `<div class="view-sub" style="margin-bottom:4px">🔁 Esta actividad se repite toda la semana</div>` : ''}
       `}
       <div class="sheet-actions">
         <button class="btn btn-ghost" data-action="overlay-close">Cancelar</button>
@@ -600,6 +606,7 @@ function wireActivityForm(isEdit){
     d.title = document.getElementById('fTitle').value.trim();
     d.description = document.getElementById('fDesc').value.trim();
     d.youtube = document.getElementById('fYoutube').value.trim();
+    d.spotify = document.getElementById('fSpotify').value.trim();
     if(!d.title){ document.getElementById('fTitle').style.borderColor = '#C4302B'; return; }
 
     if(!isEdit && repeatChk && repeatChk.checked){
@@ -621,7 +628,7 @@ function wireActivityForm(isEdit){
         onThis: ()=>{ saveActivitySingle({...d, planId:null}); },
         onAll: ()=>{
           STATE.activities = STATE.activities.map(a=> a.planId===d.planId
-            ? { ...a, title:d.title, description:d.description, youtube:d.youtube, instruments:d.instruments, section:d.section }
+            ? { ...a, title:d.title, description:d.description, youtube:d.youtube, spotify:d.spotify, instruments:d.instruments, section:d.section }
             : a);
           saveState(); closeModal(); render();
         }

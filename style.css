@@ -219,6 +219,7 @@ input,select,textarea{font-family:inherit}
 .chips{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
 .chip{background:var(--cream-deep); font-size:12px; font-weight:700; padding:4px 11px; border-radius:999px; color:var(--ink)}
 .yt-link{display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:800; color:#C4302B; text-decoration:none; margin-bottom:10px}
+.sp-link{display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:800; color:#1DB954; text-decoration:none; margin-bottom:10px}
 .act-actions{display:flex; gap:8px; margin-top:8px}
 
 /* ===== Flauta: alumnos y ficha diaria ===== */
