@@ -208,7 +208,7 @@ function miniCard(a, mode='edit'){
   const s = SECTIONS[a.section];
   const action = mode==='view' ? 'view-activity' : 'edit-activity';
   return `<div class="mini-card sec-${a.section}-soft" data-action="${action}" data-id="${a.id}">
-    ${s.short} · ${a.title || 'Actividad'}${a.planId ? ' 🔁' : ''}
+    ${s.short} · ${a.title || 'Actividad'}${a.planId ? ' ' : ''}
   </div>`;
 }
 function miniCardRecord(r){
@@ -259,7 +259,7 @@ function activityCard(a){
     <div class="act-top">
       <div>
         <div class="act-date">${fmtHuman(a.date)}</div>
-        <div class="act-title">${escapeHtml(a.title||'Actividad')}${a.planId ? ' <span title="Se repite toda la semana">🔁</span>' : ''}</div>
+        <div class="act-title">${escapeHtml(a.title||'Actividad')}${a.planId ? ' <span title="Se repite toda la semana"></span>' : ''}</div>
       </div>
       <span class="pill pill-${a.section}">${meta.short}</span>
     </div>
@@ -430,7 +430,7 @@ function openActivityView(id){
   openModal(`
     <div class="sheet">
       <div class="sheet-head">
-        <h3>${meta.short}${a.planId ? ' 🔁' : ''}</h3>
+        <h3>${meta.short}${a.planId ? ' ' : ''}</h3>
         <button class="closebtn" data-action="overlay-close">✕</button>
       </div>
       <div class="act-date">${fmtHuman(a.date)}</div>
@@ -540,7 +540,7 @@ function renderActivityForm(isEdit){
         <label class="checkbox-label"><input type="checkbox" id="fRepeatWeek"> Repetir en todos los días de clase de esta sección esta semana</label>
         <div class="view-sub" id="repeatPreview" style="margin-top:6px;font-size:15px"></div>
       </div>` : `
-      ${d.planId ? `<div class="view-sub" style="margin-bottom:4px">🔁 Esta actividad se repite toda la semana</div>` : ''}
+      ${d.planId ? `<div class="view-sub" style="margin-bottom:4px"> Esta actividad se repite toda la semana</div>` : ''}
       `}
       <div class="sheet-actions">
         <button class="btn btn-ghost" data-action="overlay-close">Cancelar</button>
